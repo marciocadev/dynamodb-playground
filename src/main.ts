@@ -1,11 +1,79 @@
-import { App, Stack, StackProps } from 'aws-cdk-lib';
+import { App, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { AttributeType, BillingMode, StreamViewType, Table } from 'aws-cdk-lib/aws-dynamodb';
+import { FilterCriteria, FilterRule, StartingPosition } from 'aws-cdk-lib/aws-lambda';
+import { DynamoEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
+import { join } from 'path';
 
 export class MyStack extends Stack {
   constructor(scope: Construct, id: string, props: StackProps = {}) {
     super(scope, id, props);
 
-    // define resources here...
+    let table = new Table(this, 'table', {
+      partitionKey: {
+        name: 'id',
+        type: AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'cpf',
+        type: AttributeType.STRING,
+      },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+      stream: StreamViewType.NEW_AND_OLD_IMAGES,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    table.addGlobalSecondaryIndex({
+      indexName: "secundary",
+      partitionKey: {
+        name: "cpf",
+        type: AttributeType.STRING
+      },
+      sortKey: {
+        name: 'nome',
+        type: AttributeType.STRING
+      }
+    });
+
+    let insertFn = new NodejsFunction(this, 'insert-function', {
+      handler: 'handler',
+      entry: join(__dirname, 'lambda-fns/insert.ts'),
+    });
+    insertFn.addEventSource(new DynamoEventSource(table, {
+      startingPosition: StartingPosition.TRIM_HORIZON,
+      filters: [
+        FilterCriteria.filter({
+          eventName: FilterRule.isEqual('INSERT'),
+        }),
+      ],
+    }));
+
+    let updateFn = new NodejsFunction(this, 'update-function', {
+      handler: 'handler',
+      entry: join(__dirname, 'lambda-fns/update.ts'),
+    });
+    updateFn.addEventSource(new DynamoEventSource(table, {
+      startingPosition: StartingPosition.TRIM_HORIZON,
+      filters: [
+        FilterCriteria.filter({
+          eventName: FilterRule.isEqual('MODIFY'),
+        }),
+      ],
+    }));
+
+    let deleteFn = new NodejsFunction(this, 'delete-function', {
+      handler: 'handler',
+      entry: join(__dirname, 'lambda-fns/delete.ts'),
+    });
+    deleteFn.addEventSource(new DynamoEventSource(table, {
+      startingPosition: StartingPosition.TRIM_HORIZON,
+      filters: [
+        FilterCriteria.filter({
+          eventName: FilterRule.isEqual('REMOVE'),
+        }),
+      ],
+    }));
   }
 }
 

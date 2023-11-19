@@ -42,6 +42,7 @@
     "typescript": "^5.2.2"
   },
   "dependencies": {
+    "@types/aws-lambda": "^8.10.126",
     "aws-cdk-lib": "^2.110.0",
     "constructs": "^10.0.5"
   },
